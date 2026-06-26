@@ -1,35 +1,36 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-// Увеличиваем лимиты на размер передаваемых данных (Base64 файлы картинок/музыки могут быть тяжелыми)
+
+// Используем переменную окружения PORT для Render, если она есть, иначе 3001 для локальной разработки
+const PORT = process.env.PORT || 3001;
+
+// Увеличиваем лимиты на размер передаваемых данных
 const io = require('socket.io')(http, {
     maxHttpBufferSize: 1e8 // ~100 MB
 });
 
 app.use(express.static(__dirname));
 
-// Хранилище комнат. Структура: { "Имя_Комнаты": { currentImage: '', currentAudio: '', players: { "userId": {...} } } }
+// Хранилище комнат
 let gameRooms = {};
 
 io.on('connection', (socket) => {
     let currentRoom = null;
     let currentUserId = null;
 
-    // Игрок или Мастер запрашивает вход в комнату
     socket.on('join_room', (data) => {
         const roomName = data.room ? data.room.trim() : null;
         const name = data.name ? data.name.trim() : 'Герой';
-        const userId = data.userId || data.id; // Получаем сгенерированный уникальный ID
+        const userId = data.userId || data.id;
         
         if (!roomName || !userId) return;
 
         currentRoom = roomName;
         currentUserId = userId;
 
-        // Подключаем сокет к комнате Socket.io
         socket.join(roomName);
 
-        // Если такой комнаты еще нет в памяти сервера — создаем её
         if (!gameRooms[roomName]) {
             gameRooms[roomName] = {
                 currentImage: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200',
@@ -38,14 +39,12 @@ io.on('connection', (socket) => {
             };
         }
 
-        // Отправляем подключившемуся текущие настройки этой конкретной комнаты
         socket.emit('init', gameRooms[roomName]);
 
-        // Если зашел Игрок (а не Мастер), добавляем или обновляем его в списке по userId
         if (data.role === 'player') {
             gameRooms[roomName].players[userId] = {
-                id: userId,          // Уникальный ID игрока (навсегда)
-                socketId: socket.id,  // ID текущего соединения сокета (меняется при перезагрузке)
+                id: userId,
+                socketId: socket.id,
                 name: name,
                 role: data.role,
                 hp: data.hp || '20/20',
@@ -64,35 +63,29 @@ io.on('connection', (socket) => {
             };
         }
 
-        // Обновляем список игроков для всей комнаты
         io.to(roomName).emit('players_visible', gameRooms[roomName].players);
     });
 
-    // Игрок обновляет свой чарлист/инвентарь внутри комнаты
     socket.on('player_update', (data) => {
         if (!currentRoom || !gameRooms[currentRoom] || data.role === 'dm') return;
         
         const userId = data.userId || data.id;
         if (!userId) return;
         
-        // Перезаписываем данные по ключу userId, сохраняя актуальный ID сокета соединения
         gameRooms[currentRoom].players[userId] = data;
         gameRooms[currentRoom].players[userId].id = userId; 
         gameRooms[currentRoom].players[userId].socketId = socket.id;
 
-        // Рассылаем изменения участникам комнаты
         io.to(currentRoom).emit('players_visible', gameRooms[currentRoom].players);
     });
 
-    // Мастер изменяет характеристики или передает предмет конкретному игроку
     socket.on('dm_give_item', (data) => {
         if (!currentRoom || !gameRooms[currentRoom]) return;
 
-        const targetId = data.targetId; // Это наш userId игрока
+        const targetId = data.targetId;
         const targetPlayer = gameRooms[currentRoom].players[targetId];
 
         if (targetPlayer) {
-            // Если мастер обновляет характеристики (кнопка "Применить характеристики")
             if (data.statsUpdate !== undefined) {
                 const s = data.statsUpdate;
                 targetPlayer.hp = s.hpCur + '/' + s.hpMax;
@@ -106,15 +99,12 @@ io.on('connection', (socket) => {
                 targetPlayer.will = s.will;
                 targetPlayer.effects = s.effects;
 
-                // Отправляем изменения в сокет конкретного игрока, используя его текущий socketId
                 io.to(targetPlayer.socketId).emit('receive_item', { statsUpdate: s });
             } 
-            // Если мастер передает или изменяет предмет в инвентаре (кнопка "Обновить ячейку игрока")
             else if (data.item !== undefined) {
                 const newItem = data.item;
                 if (!targetPlayer.inventory) targetPlayer.inventory = [];
 
-                // Ищем, есть ли уже предмет в этом слоте
                 const existingIndex = targetPlayer.inventory.findIndex(i => i.slot === newItem.slot);
                 if (existingIndex !== -1) {
                     targetPlayer.inventory[existingIndex] = newItem;
@@ -122,16 +112,13 @@ io.on('connection', (socket) => {
                     targetPlayer.inventory.push(newItem);
                 }
 
-                // Заворачиваем в { item: newItem } для стопроцентного совпадения со структурой на фронтенде
                 io.to(targetPlayer.socketId).emit('receive_item', { item: newItem });
             }
 
-            // Обновляем монитор игроков у мастера и других участников
             io.to(currentRoom).emit('players_visible', gameRooms[currentRoom].players);
         }
     });
 
-    // Бросок кубиков
     socket.on('roll_dice', (data) => {
         if (!currentRoom) return;
         
@@ -152,35 +139,25 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Изменение сцены Мастером (загрузка карты/музыки в Base64 с ПК)
     socket.on('change_scene', (data) => {
         if (!currentRoom || !gameRooms[currentRoom]) return;
 
-        // Если мастер загрузил карту, обновляем её. Если нет — оставляем старую.
         if (data.image) gameRooms[currentRoom].currentImage = data.image;
-        // Если мастер загрузил аудио, обновляем.
         if (data.audio) gameRooms[currentRoom].currentAudio = data.audio;
 
         io.to(currentRoom).emit('scene_changed', gameRooms[currentRoom]);
     });
 
-    // ДОБАВЛЕНО: Выключение музыки Мастером для всей комнаты
     socket.on('dm_stop_audio', () => {
         if (!currentRoom || !gameRooms[currentRoom]) return;
-        
-        // Стираем аудиотрек из памяти текущей комнаты
         gameRooms[currentRoom].currentAudio = '';
-        
-        // Сигнализируем всем клиентам в комнате, что пора остановить музыку
         io.to(currentRoom).emit('stop_audio');
     });
 
-    // Игрок вышел или обновил страницу
-    socket.on('disconnect', () => {
-        // Данные сохраняются во избежание потерь при F5
-    });
+    socket.on('disconnect', () => {});
 });
 
-http.listen(3001, () => {
-    console.log('=== СЕРВЕР КОМНАТ ЗАПУЩЕН НА ПОРТУ 3001 ===');
+// Запуск сервера на динамическом порту
+http.listen(PORT, () => {
+    console.log(`=== СЕРВЕР ЗАПУЩЕН НА ПОРТУ ${PORT} ===`);
 });

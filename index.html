@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -943,4 +944,316 @@
         }
     </script>
 </body>
+=======
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Для Эли ✨</title>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(180deg, #fdf2f8 0%, #e0f2fe 100%);
+            --text-color: #0f172a;
+            --accent-pink: #f43f5e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom) 20px;
+            overflow: hidden;
+            /* Фикс для iOS, чтобы страница не дергалась вверх-вниз */
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        .screen {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 32px;
+            padding: 35px 24px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.05);
+            text-align: center;
+            transition: all 0.4s ease;
+            cursor: pointer; /* Делает элемент кликабельным для iOS */
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            line-height: 1.3;
+        }
+
+        p {
+            font-size: 16px;
+            line-height: 1.5;
+            color: #475569;
+            margin-bottom: 24px;
+        }
+
+        .btn {
+            background: #0ea5e9;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(14, 165, 233, 0.2);
+            width: 100%;
+            transition: transform 0.1s;
+            display: block;
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        /* Игровой экран */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 380px;
+            background: rgba(255, 255, 255, 0.4);
+            border-radius: 24px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            touch-action: none; /* Отключает стандартные жесты браузера внутри игры */
+        }
+
+        .basket {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 45px;
+            line-height: 1;
+            width: 60px;
+            height: 60px;
+            text-align: center;
+            touch-action: none;
+            z-index: 10;
+        }
+
+        .falling-item {
+            position: absolute;
+            font-size: 30px;
+            top: -40px;
+            pointer-events: none;
+        }
+
+        .score-board {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #0284c7;
+        }
+
+        /* Финальный экран */
+        .final-emoji {
+            font-size: 64px;
+            margin-bottom: 15px;
+            display: inline-block;
+            animation: bounce 2s infinite;
+        }
+
+        .heart-text {
+            color: var(--accent-pink);
+            font-weight: 600;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Скрин 1: АджараГуджу -->
+    <div class="screen" id="scr-start">
+        <h1>Привет Эля... 👀</h1>
+        <p>Мы недавно познакомились, но ты мне <span class="heart-text">очень-очень нравишься</span>, и я постоянно о тебе думаю.</p>
+        <p>Знаю, что сегодняшний день выжал из тебя все силы, ещё и эта душная жара, скучные пары... Ты, наверное, жутко устала.</p>
+        <p>Хочу тебя немного улыбнуть. Давай соберём тебе самый прохладный лимонад?</p>
+        <!-- Заменили onclick на touchend для мгновенного отклика на iPhone -->
+        <button class="btn" id="start-btn">Давай!</button>
+    </div>
+
+    <!-- Скрин 2: Игра -->
+    <div class="screen hidden" id="scr-game">
+        <div class="score-board">Ловим прохладу: <span id="score">0</span> / 20</div>
+        <div id="game-container">
+            <div class="basket" id="basket">🍹</div>
+        </div>
+        <p style="font-size: 14px; margin-bottom: 0; color: #64748b;">Води пальцем, чтобы двигать стаканчик</p>
+    </div>
+
+    <!-- Скрин 3: Канец епрст -->
+    <div class="screen hidden" id="scr-final">
+        <div class="final-emoji">🥰✨</div>
+        <h1>Гойда! Самый сладкий лимонад для самой милой девушки</h1>
+        <p>Ты невероятно очаровательная, и даже когда ты не выспалась и устала, ты всё равно остаёшься чудесной.</p>
+        <p>Ты просто умничка, что справилась с этим тяжёлым днём.</p>
+        <p>Отдыхай, засыпай пораньше и восстанавливай силы. Очень жду нашей встречи! 😊 Обнял.</p>
+    </div>
+
+    <script>
+        const container = document.getElementById('game-container');
+        const basket = document.getElementById('basket');
+        const scoreEl = document.getElementById('score');
+        const startBtn = document.getElementById('start-btn');
+        
+        let score = 0;
+        let gameActive = false;
+        let itemsInterval;
+        let animationFrameId;
+        let fallingItems = [];
+        let isDragging = false;
+        
+        // кнопка СТАРТ для iOS
+        startBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            startGame();
+        });
+        // На всякий случай для тестов с ПК
+        startBtn.addEventListener('click', () => {
+            if (!gameActive && score === 0) startGame();
+        });
+        
+        // Исправленное управление тачем для iPhone 14
+        container.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            moveBasket(e);
+        }, { passive: false });
+        
+        window.addEventListener('touchmove', (e) => {
+            if (!isDragging || !gameActive) return;
+            // Это самое главное: запрещаем айфону скроллить саму страницу во время игры!
+            if (e.cancelable) e.preventDefault(); 
+            moveBasket(e);
+        }, { passive: false });
+        
+        window.addEventListener('touchend', () => { isDragging = false; });
+
+        function moveBasket(e) {
+            const rect = container.getBoundingClientRect();
+            // Берем координаты именно первого пальца на экране
+            let touchX = e.touches[0].clientX - rect.left;
+            
+            if (touchX < 30) touchX = 30;
+            if (touchX > rect.width - 30) touchX = rect.width - 30;
+            
+            basket.style.left = touchX + 'px';
+        }
+
+        function startGame() {
+            document.getElementById('scr-start').classList.add('hidden');
+            document.getElementById('scr-game').classList.remove('hidden');
+            gameActive = true;
+            score = 0;
+            itemsInterval = setInterval(spawnItem, 750);
+            updateGame();
+        }
+
+        const emojis = ['🧊', '🍋', '🍃', '💖', '🧊', '🍓'];
+
+        function spawnItem() {
+            if (!gameActive) return;
+            const item = document.createElement('div');
+            item.className = 'falling-item';
+            item.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+            
+            const rect = container.getBoundingClientRect();
+            item.style.left = Math.random() * (rect.width - 30) + 'px';
+            container.appendChild(item);
+            
+            fallingItems.push({
+                element: item,
+                y: -40,
+                speed: 3.5 + Math.random() * 2.5
+            });
+        }
+
+        function updateGame() {
+            if (!gameActive) return;
+
+            const basketRect = basket.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            for (let i = fallingItems.length - 1; i >= 0; i--) {
+                const item = fallingItems[i];
+                item.y += item.speed;
+                item.element.style.top = item.y + 'px';
+
+                const itemRect = item.element.getBoundingClientRect();
+
+                if (
+                    itemRect.bottom >= basketRect.top &&
+                    itemRect.top <= basketRect.bottom &&
+                    itemRect.right >= basketRect.left &&
+                    itemRect.left <= basketRect.right
+                ) {
+                    item.element.remove();
+                    fallingItems.splice(i, 1);
+                    score++;
+                    scoreEl.innerText = score;
+
+                    if (score >= 20) {
+                        endGame();
+                        return;
+                    }
+                    continue;
+                }
+
+                if (item.y > containerRect.height) {
+                    item.element.remove();
+                    fallingItems.splice(i, 1);
+                }
+            }
+
+            animationFrameId = requestAnimationFrame(updateGame);
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(itemsInterval);
+            cancelAnimationFrame(animationFrameId);
+            
+            fallingItems.forEach(item => item.element.remove());
+            fallingItems = [];
+
+            document.getElementById('scr-game').classList.add('hidden');
+            document.getElementById('scr-final').classList.remove('hidden');
+        }
+    </script>
+</body>
+>>>>>>> 16469461d93d6dd3b675fd657d037e296f6d3ba2
 </html>
