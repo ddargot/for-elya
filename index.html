@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ДнД Комната</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #222; color: #fff; margin: 20px; display: flex; flex-direction: column; gap: 20px; position: relative; overflow-x: hidden; }
+        h2, h3 { color: #f0a500; margin-top: 0; }
+        .role-selector { background: #333; padding: 15px; border-radius: 8px; display: flex; gap: 15px; align-items: center; border: 1px solid #f0a500; }
+        .main-layout { display: flex; gap: 20px; width: 100%; }
+        .panel { background: #333; padding: 15px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+        .left-side { flex: 2; display: flex; flex-direction: column; gap: 20px; }
+        .right-side { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+        
+        #map-container { width: 100%; min-height: 350px; background: #111; border: 2px solid #555; border-radius: 5px; display: flex; justify-content: center; align-items: center; }
+        #map-image { max-width: 100%; max-height: 500px; object-fit: contain; }
+        
+        #dice-log { height: 130px; background: #111; border: 1px solid #444; padding: 10px; overflow-y: auto; border-radius: 5px; font-family: monospace; }
+        
+        .log-entry { 
+            margin-bottom: 5px; 
+            border-left: 3px solid #f0a500; 
+            padding-left: 5px;
+            animation: diceRollAnim 0.6s ease-out;
+        }
+
+        @keyframes diceRollAnim {
+            0% { transform: translateX(-20px) scale(0.9); background: rgba(240, 165, 0, 0.4); box-shadow: 0 0 15px #f0a500; opacity: 0; }
+            20% { transform: translateX(5px) rotate(-1deg); }
+            40% { transform: translateX(-5px) rotate(1deg); }
+            60% { transform: translateX(3px) rotate(0deg); }
+            100% { transform: translateX(0) scale(1); background: transparent; box-shadow: 0 0 0 transparent; opacity: 1; }
+        }
+        
+        .stat-group { display: flex; align-items: center; margin-bottom: 8px; gap: 10px; }
+        .stat-group label { width: 100px; font-weight: bold; display: flex; align-items: center; gap: 5px; }
+        
+        input, select, textarea { background: #444; color: #fff; border: 1px solid #666; padding: 4px; border-radius: 4px; font-family: Arial, sans-serif; }
+        input[type="number"] { width: 55px; text-align: center; }
+        input[type="file"] { background: transparent; border: none; color: #ccc; }
+        
+        button { background: #f0a500; color: #000; border: none; padding: 8px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; margin-top: 5px; transition: transform 0.1s; }
+        button:hover { background: #ffbe33; }
+        button:active { transform: scale(0.95); }
+
+        .dice-btn { background: #444; color: #fff; border: 1px solid #666; margin-right: 5px; padding: 5px 10px; transition: all 0.2s; }
+        .dice-btn:hover { background: #f0a500; color: #000; box-shadow: 0 0 8px #f0a500; }
+        
+        /* ИНВЕНТАРЬ */
+        .inventory-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; background: #1a1a1a; padding: 10px; border-radius: 8px; border: 1px solid #444; }
+        .inv-cell-wrapper { position: relative; background: #262626; border: 2px solid #3a3a3a; border-radius: 6px; height: 110px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 5px; transition: all 0.2s ease; box-sizing: border-box; overflow: hidden; }
+        .inv-cell-wrapper:hover { border-color: #f0a500; background: #2d2d2d; }
+        
+        .inv-item-img { width: 100%; height: 50px; object-fit: contain; border-radius: 4px; background: #111; cursor: pointer; display: block; }
+        .inv-cell-file-label { font-size: 10px; color: #aaa; text-align: center; cursor: pointer; padding: 2px; width: 100%; border: 1px dashed #555; background: #111; border-radius: 3px; box-sizing: border-box; }
+        .inv-cell-file-label:hover { border-color: #f0a500; color: #fff; }
+        .inv-cell-desc { width: 95%; font-size: 11px; padding: 2px; background: #222; border: 1px solid #555; text-align: center; color: #ffbe33; font-weight: bold; box-sizing: border-box; }
+        
+        .clear-cell-btn { position: absolute; top: 2px; right: 2px; background: rgba(255, 68, 68, 0.8); color: #fff; border: none; border-radius: 3px; font-size: 8px; cursor: pointer; padding: 1px 4px; display: none; font-weight: bold; z-index: 5; }
+        .inv-cell-wrapper:hover .clear-cell-btn { display: block; }
+        .clear-cell-btn:hover { background: #ff0000; }
+
+        /* СПИСКИ УМЕНИЙ */
+        .skills-container { display: flex; flex-direction: column; gap: 10px; background: #1a1a1a; padding: 10px; border-radius: 8px; border: 1px solid #444; margin-top: 10px; }
+        .skill-node { background: #262626; border: 1px solid #555; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 5px; position: relative; }
+        .skill-node summary { font-weight: bold; color: #ffbe33; cursor: pointer; outline: none; user-select: none; }
+        .skill-node p { margin: 5px 0 0 0; font-size: 13px; color: #ddd; background: #111; padding: 6px; border-radius: 4px; border-left: 2px solid #f0a500; white-space: pre-wrap; }
+        .delete-skill-btn { position: absolute; top: 6px; right: 6px; background: #ff4444; color: white; border: none; font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer; }
+        .delete-skill-btn:hover { background: red; }
+
+        .dm-panel { border: 2px dashed #f0a500; display: none; }
+        .dm-panel .section { background: #2a2a2a; padding: 12px; margin-bottom: 12px; border-radius: 6px; border: 1px solid #444; }
+        .player-panel { display: block; }
+        
+        .player-card { background: #222; border: 1px solid #f0a500; padding: 10px; margin-top: 10px; border-radius: 5px; }
+        .player-card p { margin: 5px 0; font-size: 14px; display: flex; align-items: center; gap: 5px; }
+        .player-card .mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; font-size: 11px; background: #111; padding: 5px; border-radius: 4px; }
+
+        #dice-overlay-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 10000; display: flex; justify-content: center; align-items: center; gap: 25px; }
+        
+        .screen-dice { 
+            width: 110px; 
+            height: 110px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            font-size: 34px; 
+            font-weight: bold; 
+            font-family: 'Georgia', serif; 
+            color: #000;
+            text-shadow: 1px 1px 1px rgba(255,255,255,0.5);
+            animation: throwDice 1.8s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            position: relative; 
+            transition: background 0.1s;
+        }
+        
+        .screen-dice.d4 { clip-path: polygon(50% 0%, 0% 100%, 100% 100%); background: #bdc3c7; padding-top: 25px; height: 95px; box-shadow: inset 0 -15px 20px rgba(0,0,0,0.3); }
+        .screen-dice.d6 { background: #e67e22; border-radius: 8px; box-shadow: inset 0 0 20px rgba(0,0,0,0.4); }
+        .screen-dice.d8 { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); background: #9b59b6; color: #fff; }
+        .screen-dice.d10 { clip-path: polygon(50% 0%, 100% 38%, 50% 100%, 0% 38%); background: #1abc9c; }
+        .screen-dice.d12 { clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); background: #3498db; color: #fff; }
+        .screen-dice.d20 { clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); background: #e74c3c; color: #fff; filter: drop-shadow(0 0 15px #e74c3c); }
+
+        .gold-icon { display: inline-block; width: 16px; height: 16px; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ffd700"><circle cx="12" cy="12" r="10" stroke="%23b8860b" stroke-width="2"/><circle cx="12" cy="12" r="6" fill="none" stroke="%23b8860b" stroke-width="1.5"/><path d="M12 9v6M10 10.5h4M10 13.5h4" stroke="%23b8860b" stroke-width="1.5" stroke-linecap="round"/></svg>'); background-size: contain; background-repeat: no-repeat; vertical-align: middle; }
+
+        @keyframes throwDice {
+            0% { transform: scale(0) rotate(0deg) translateY(300px); opacity: 0; }
+            15% { transform: scale(1.3) rotate(360deg) translateY(-60px); opacity: 1; }
+            30% { transform: scale(1) rotate(720deg) translateY(20px); }
+            45% { transform: scale(1.1) rotate(1080deg) translateY(-10px); }
+            70% { transform: scale(1) rotate(1440deg) translateY(0); opacity: 1; filter: brightness(1); }
+            90% { transform: scale(1) rotate(1440deg); opacity: 1; filter: brightness(1.4); }
+            100% { transform: scale(0) rotate(1500deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="dice-overlay-container"></div>
+
+    <div class="role-selector">
+        <strong>Кто вы?</strong>
+        <label><input type="radio" name="role" id="role-player" value="player" checked onclick="switchRole('player')"> Игрок</label>
+        <label><input type="radio" name="role" id="role-dm" value="dm" onclick="switchRole('dm')"> Мастер (DM)</label>
+        
+        <div style="margin-left: auto; display: flex; gap: 15px; align-items: center;">
+            <div>
+                <label>🏰 Комната: </label>
+                <input type="text" id="room-name" value="room1" style="width: 100px;" oninput="changeRoom()">
+            </div>
+            <div>
+                <label>Ваш Никнейм: </label>
+                <input type="text" id="player-name" value="Герой" oninput="saveAndSend()">
+            </div>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="left-side">
+            <div class="panel">
+                <h2>🗺️ Игровая сцена</h2>
+                <div id="map-container">
+                    <img id="map-image" src="" alt="Ожидание загрузки карты...">
+                </div>
+                
+                <!-- ДОБАВЛЕНО: Блок управления звуком для всех (Громкость) -->
+                <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px; background: #111; padding: 8px; border-radius: 5px;">
+                    <span>🎵 Громкость музыки:</span>
+                    <input type="range" id="volume-control" min="0" max="1" step="0.05" value="0.5" oninput="changeVolume(this.value)" style="flex: 1; cursor: pointer;">
+                    <span id="volume-value">50%</span>
+                </div>
+                <audio id="bg-music" loop></audio>
+            </div>
+
+            <div class="panel">
+                <h2>🎲 Бросок кубиков</h2>
+                <div>
+                    <button class="dice-btn" onclick="roll(4)">d4</button>
+                    <button class="dice-btn" onclick="roll(6)">d6</button>
+                    <button class="dice-btn" onclick="roll(8)">d8</button>
+                    <button class="dice-btn" onclick="roll(10)">d10</button>
+                    <button class="dice-btn" onclick="roll(12)">d12</button>
+                    <button class="dice-btn" onclick="roll(20)">d20</button>
+                    кол-во: <input type="number" id="dice-count" value="1" min="1" max="10">
+                </div>
+                <h3>Лог бросков:</h3>
+                <div id="dice-log"></div>
+            </div>
+        </div>
+
+        <div class="right-side">
+            <div class="panel player-panel" id="player-ui">
+                <h2>📜 Лист Персонажа</h2>
+                
+                <h3>✨ Активные Эффекты (Баффы / Дебаффы)</h3>
+                <div style="margin-bottom: 15px;">
+                    <input type="text" id="player-effects" placeholder="Например: Отравление (-2 HP в ход), Ярость (+3 к урону)" style="width: 97%; padding: 6px; font-weight: bold; border: 1px solid #ffbe33; color: #ffbe33;" oninput="saveAndSend()">
+                </div>
+
+                <h3>Ресурсы</h3>
+                <div class="stat-group"><label>❤️ Жизни:</label><input type="number" id="hp-cur" value="20" oninput="saveAndSend()"> / <input type="number" id="hp-max" value="20" oninput="saveAndSend()"></div>
+                <div class="stat-group"><label>🔮 Мана:</label><input type="number" id="mp-cur" value="10" oninput="saveAndSend()"> / <input type="number" id="mp-max" value="10" oninput="saveAndSend()"></div>
+                <div class="stat-group"><label>⚡ Усталость:</label><input type="number" id="sp-cur" value="0" oninput="saveAndSend()"> / <input type="number" id="sp-max" value="10" oninput="saveAndSend()"></div>
+                <div class="stat-group"><label><span class="gold-icon"></span> Золото:</label><input type="number" id="gold-count" value="0" min="0" style="width: 80px; text-align: left;" oninput="saveAndSend()"></div>
+                
+                <h3>Характеристики</h3>
+                <div class="stat-group"><label>💪 Сила:</label><input type="number" id="st-str" value="10" oninput="onStrengthChange()"></div>
+                <div class="stat-group"><label>🏃 Ловкость:</label><input type="number" id="st-dex" value="10" oninput="saveAndSend()"></div>
+                <div class="stat-group"><label>🧠 Интеллект:</label><input type="number" id="st-int" value="10" oninput="saveAndSend()"></div>
+                <div class="stat-group"><label>🗣️ Харизма:</label><input type="number" id="st-cha" value="10" oninput="saveAndSend()"></div>
+                <div class="stat-group"><label>🛡️ Воля:</label><input type="number" id="st-will" value="10" oninput="saveAndSend()"></div>
+                
+                <h3>⚔️ Книга Умений</h3>
+                <div style="background: #222; padding: 10px; border-radius: 6px; border: 1px solid #555; display: flex; flex-direction: column; gap: 5px;">
+                    <input type="text" id="new-skill-name" placeholder="Название умения (например: Огненный шар)" style="width: 95%;">
+                    <textarea id="new-skill-desc" placeholder="Описание умения, дистанция, урон..." rows="2" style="width: 95%; resize: vertical;"></textarea>
+                    <button onclick="addSkill()" style="margin-top: 2px;">⚡ Добавить умение</button>
+                </div>
+                <div class="skills-container" id="player-skills-list"></div>
+
+                <h3 id="inv-title">🎒 Инвентарь (18 ячеек)</h3>
+                <div class="inventory-grid" id="inv-grid"></div>
+            </div>
+
+            <div class="panel dm-panel" id="dm-ui">
+                <h2>👑 Панель Мастера</h2>
+                
+                <div class="section">
+                    <h3>🎭 Редактор выбранного персонажа</h3>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:12px;color:#aaa;">Выберите цель:</label>
+                        <select id="dm-edit-target" style="width:100%;" onchange="loadTargetDataToDM()">
+                            <option value="">-- Выберите игрока --</option>
+                        </select>
+                    </div>
+                    
+                    <div id="dm-editor-fields" style="display:none; flex-direction:column; gap:8px; border-top:1px solid #555; padding-top:10px;">
+                        <div style="display:flex; gap:10px;">
+                            <div>❤️ HP: <input type="number" id="dm-hp-cur" style="width:45px;"> / <input type="number" id="dm-hp-max" style="width:45px;"></div>
+                            <div>🔮 MP: <input type="number" id="dm-mp-cur" style="width:45px;"> / <input type="number" id="dm-mp-max" style="width:45px;"></div>
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <div>⚡ Уст: <input type="number" id="dm-sp-cur" style="width:45px;"> / <input type="number" id="dm-sp-max" style="width:45px;"></div>
+                            <div>🪙 Золото: <input type="number" id="dm-gold" style="width:65px;"></div>
+                        </div>
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:5px; font-size:12px; background:#111; padding:6px; border-radius:4px;">
+                            <div>💪 СИЛ: <input type="number" id="dm-str" style="width:40px;"></div>
+                            <div>🏃 ЛОВ: <input type="number" id="dm-dex" style="width:40px;"></div>
+                            <div>🧠 ИНТ: <input type="number" id="dm-int" style="width:40px;"></div>
+                            <div>🗣️ ХАР: <input type="number" id="dm-cha" style="width:40px;"></div>
+                            <div>🛡️ ВОЛ: <input type="number" id="dm-will" style="width:40px;"></div>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#aaa;">Активные эффекты:</label>
+                            <input type="text" id="dm-effects-input" style="width:96%; color:#ffbe33;">
+                        </div>
+                        <button onclick="applyStatsFromDM()" style="background:#4caf50; color:#fff;">💾 Применить характеристики</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>⚔️ Кузница Предметов (Инвентарь)</h3>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:12px;color:#aaa;">Кому выдать/изменить слот:</label>
+                        <select id="dm-target-player" style="width:100%;">
+                            <option value="">-- Выберите игрока --</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:12px;color:#aaa;">Номер ячейки (слота):</label>
+                        <input type="number" id="dm-item-slot" min="1" value="1" style="width:60px;">
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:12px;color:#aaa;">Иконка предмета (Файлом с ПК):</label>
+                        <input type="file" id="dm-item-file" accept="image/*" style="width:95%;">
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:12px;color:#aaa;">Название / Описание предмета:</label>
+                        <input type="text" id="dm-item-desc" placeholder="Зелье лечения / Меч +1" style="width:95%;">
+                    </div>
+                    <button onclick="giveItemToPlayer()">🔨 Обновить ячейку игрока</button>
+                </div>
+
+                <div class="section">
+                    <h3>🗺 arrow_forward Управление Сценой</h3>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:12px;color:#aaa;">Файл карты (Изображение):</label>
+                        <input type="file" id="dm-file-map" accept="image/*">
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:12px;color:#aaa;">Файл музыки (MP3/WAV):</label>
+                        <input type="file" id="dm-file-audio" accept="audio/*">
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="uploadSceneFiles()" style="flex: 2;">Запустить сцену у всех</button>
+                        <!-- ДОБАВЛЕНО: Кнопка экстренного выключения музыки для Мастера -->
+                        <button onclick="stopAudioFromDM()" style="background: #ff4444; color: #fff; flex: 1;">🛑 Выкл. звук</button>
+                    </div>
+                </div>
+                
+                <h3>👁️ Монитор Игроков этой комнаты:</h3>
+                <div id="dm-players-monitor">Никто еще не заполнил чарлист...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentRole = 'player';
+        let currentRoom = 'room1';
+        let temporaryInventoryCache = {}; 
+        let playerSkills = []; 
+        let cachedPlayersData = {}; 
+
+        // ГЕНЕРАЦИЯ УНИКАЛЬНОГО ID ИГРОКА
+        let myUserId = localStorage.getItem('dnd_user_id') || 'usr_' + Date.now() + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('dnd_user_id', myUserId);
+
+        function calculateSlots() {
+            const strValue = parseInt(document.getElementById('st-str').value) || 10;
+            let slots = 18;
+            if (strValue > 10) {
+                slots += (strValue - 10) * 2;
+            }
+            return slots;
+        }
+
+        function renderInventory() {
+            const grid = document.getElementById('inv-grid');
+            const totalSlots = calculateSlots();
+            document.getElementById('inv-title').innerText = `🎒 Инвентарь (${totalSlots} ячеек)`;
+
+            grid.innerHTML = '';
+
+            for (let i = 1; i <= totalSlots; i++) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'inv-cell-wrapper';
+                wrapper.id = `cell-wrapper-${i}`;
+
+                const clearBtn = document.createElement('button');
+                clearBtn.className = 'clear-cell-btn';
+                clearBtn.innerText = '❌';
+                clearBtn.onclick = (e) => {
+                    e.preventDefault();
+                    document.getElementById(`cell-img-${i}`).style.display = 'none';
+                    document.getElementById(`cell-img-${i}`).src = '';
+                    document.getElementById(`cell-desc-${i}`).value = '';
+                    if(temporaryInventoryCache[i]) {
+                        temporaryInventoryCache[i].url = '';
+                        temporaryInventoryCache[i].desc = '';
+                    }
+                    saveAndSend();
+                };
+
+                const img = document.createElement('img');
+                img.className = 'inv-item-img';
+                img.id = `cell-img-${i}`;
+                img.style.display = 'none';
+
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = 'image/*';
+                fileInput.style.display = 'none';
+                fileInput.id = `cell-file-${i}`;
+                fileInput.onchange = async (e) => {
+                    if (fileInput.files[0]) {
+                        const base64 = await fileToDataURL(fileInput.files[0]);
+                        img.src = base64;
+                        img.style.display = 'block';
+                        if(!temporaryInventoryCache[i]) temporaryInventoryCache[i] = {};
+                        temporaryInventoryCache[i].url = base64;
+                        saveAndSend();
+                    }
+                };
+
+                const fileLabel = document.createElement('label');
+                fileLabel.className = 'inv-cell-file-label';
+                fileLabel.innerText = '📁 Загрузить';
+                fileLabel.htmlFor = `cell-file-${i}`;
+
+                const inputDesc = document.createElement('input');
+                inputDesc.type = 'text';
+                inputDesc.className = 'inv-cell-desc';
+                inputDesc.placeholder = `Слот ${i}`;
+                inputDesc.id = `cell-desc-${i}`;
+                inputDesc.oninput = () => {
+                    if(!temporaryInventoryCache[i]) temporaryInventoryCache[i] = {};
+                    temporaryInventoryCache[i].desc = inputDesc.value;
+                    saveAndSend();
+                };
+
+                if (temporaryInventoryCache[i]) {
+                    inputDesc.value = temporaryInventoryCache[i].desc || '';
+                    if (temporaryInventoryCache[i].url) {
+                        img.src = temporaryInventoryCache[i].url;
+                        img.style.display = 'block';
+                    }
+                }
+
+                wrapper.appendChild(clearBtn);
+                wrapper.appendChild(img);
+                wrapper.appendChild(fileInput);
+                wrapper.appendChild(fileLabel);
+                wrapper.appendChild(inputDesc);
+                grid.appendChild(wrapper);
+            }
+        }
+
+        function renderSkills() {
+            const container = document.getElementById('player-skills-list');
+            container.innerHTML = '';
+            
+            playerSkills.forEach(skill => {
+                const node = document.createElement('details');
+                node.className = 'skill-node';
+                
+                const summary = document.createElement('summary');
+                summary.innerText = `✨ ${skill.name}`;
+                
+                const desc = document.createElement('p');
+                desc.innerText = skill.desc || 'Описание отсутствует.';
+                
+                const delBtn = document.createElement('button');
+                delBtn.className = 'delete-skill-btn';
+                delBtn.innerText = 'Удалить';
+                delBtn.onclick = (e) => {
+                    e.preventDefault();
+                    playerSkills = playerSkills.filter(s => s.id !== skill.id);
+                    renderSkills();
+                    saveAndSend();
+                };
+                
+                node.appendChild(summary);
+                node.appendChild(desc);
+                node.appendChild(delBtn);
+                container.appendChild(node);
+            });
+        }
+
+        function addSkill() {
+            const nameIn = document.getElementById('new-skill-name');
+            const descIn = document.getElementById('new-skill-desc');
+            const name = nameIn.value.trim();
+            const desc = descIn.value.trim();
+            
+            if(!name) { alert('Введите название умения!'); return; }
+            
+            playerSkills.push({
+                id: Date.now() + Math.random().toString(36).substr(2, 5),
+                name: name,
+                desc: desc
+            });
+            
+            nameIn.value = '';
+            descIn.value = '';
+            renderSkills();
+            saveAndSend();
+        }
+
+        function onStrengthChange() {
+            renderInventory();
+            saveAndSend();
+        }
+
+        function switchRole(role) {
+            currentRole = role;
+            localStorage.setItem('dnd_role', role);
+            if (role === 'dm') {
+                document.getElementById('dm-ui').style.display = 'block';
+                document.getElementById('player-ui').style.display = 'none';
+            } else {
+                document.getElementById('dm-ui').style.display = 'none';
+                document.getElementById('player-ui').style.display = 'block';
+            }
+            connectToRoom();
+        }
+
+        function changeRoom() {
+            currentRoom = document.getElementById('room-name').value.trim() || 'room1';
+            localStorage.setItem('dnd_room', currentRoom);
+            connectToRoom();
+        }
+
+        function getInventoryItems() {
+            let items = [];
+            const totalSlots = calculateSlots();
+            for (let i = 1; i <= totalSlots; i++) {
+                if (temporaryInventoryCache[i]) {
+                    items.push({
+                        slot: i,
+                        url: temporaryInventoryCache[i].url || '',
+                        desc: temporaryInventoryCache[i].desc || ''
+                    });
+                } else {
+                    items.push({ slot: i, url: '', desc: '' });
+                }
+            }
+            return items;
+        }
+
+        function connectToRoom() {
+            const name = document.getElementById('player-name').value.trim();
+            const items = getInventoryItems();
+
+            socket.emit('join_room', {
+                id: myUserId,
+                userId: myUserId,
+                room: currentRoom,
+                name: (currentRole === 'dm') ? 'Мастер' : name,
+                role: currentRole,
+                hp: document.getElementById('hp-cur').value + '/' + document.getElementById('hp-max').value,
+                mp: document.getElementById('mp-cur').value + '/' + document.getElementById('mp-max').value,
+                sp: document.getElementById('sp-cur').value + '/' + document.getElementById('sp-max').value,
+                gold: document.getElementById('gold-count').value || '0',
+                str: document.getElementById('st-str').value,
+                dex: document.getElementById('st-dex').value,
+                int: document.getElementById('st-int').value,
+                cha: document.getElementById('st-cha').value,
+                will: document.getElementById('st-will').value,
+                effects: document.getElementById('player-effects').value.trim(),
+                skills: playerSkills,
+                inventory: items
+            });
+        }
+
+        function saveAndSend() {
+            saveToLocalStorage();
+            if (currentRole !== 'dm') {
+                const items = getInventoryItems();
+                socket.emit('player_update', {
+                    id: myUserId,
+                    userId: myUserId,
+                    name: document.getElementById('player-name').value.trim(),
+                    role: currentRole,
+                    hp: document.getElementById('hp-cur').value + '/' + document.getElementById('hp-max').value,
+                    mp: document.getElementById('mp-cur').value + '/' + document.getElementById('mp-max').value,
+                    sp: document.getElementById('sp-cur').value + '/' + document.getElementById('sp-max').value,
+                    gold: document.getElementById('gold-count').value || '0',
+                    str: document.getElementById('st-str').value,
+                    dex: document.getElementById('st-dex').value,
+                    int: document.getElementById('st-int').value,
+                    cha: document.getElementById('st-cha').value,
+                    will: document.getElementById('st-will').value,
+                    effects: document.getElementById('player-effects').value.trim(),
+                    skills: playerSkills,
+                    inventory: items
+                });
+            }
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('dnd_name', document.getElementById('player-name').value);
+            localStorage.setItem('dnd_room', document.getElementById('room-name').value);
+            localStorage.setItem('dnd_hp_cur', document.getElementById('hp-cur').value);
+            localStorage.setItem('dnd_hp_max', document.getElementById('hp-max').value);
+            localStorage.setItem('dnd_mp_cur', document.getElementById('mp-cur').value);
+            localStorage.setItem('dnd_mp_max', document.getElementById('mp-max').value);
+            localStorage.setItem('dnd_sp_cur', document.getElementById('sp-cur').value);
+            localStorage.setItem('dnd_sp_max', document.getElementById('sp-max').value);
+            localStorage.setItem('dnd_gold', document.getElementById('gold-count').value);
+            
+            localStorage.setItem('dnd_str', document.getElementById('st-str').value);
+            localStorage.setItem('dnd_dex', document.getElementById('st-dex').value);
+            localStorage.setItem('dnd_int', document.getElementById('st-int').value);
+            localStorage.setItem('dnd_cha', document.getElementById('st-cha').value);
+            localStorage.setItem('dnd_will', document.getElementById('st-will').value);
+            
+            localStorage.setItem('dnd_effects', document.getElementById('player-effects').value);
+            localStorage.setItem('dnd_skills', JSON.stringify(playerSkills));
+            localStorage.setItem('dnd_inventory_v3', JSON.stringify(temporaryInventoryCache));
+        }
+
+        function loadFromLocalStorage() {
+            if (localStorage.getItem('dnd_name') !== null) {
+                document.getElementById('player-name').value = localStorage.getItem('dnd_name');
+                document.getElementById('room-name').value = localStorage.getItem('dnd_room') || 'room1';
+                currentRoom = document.getElementById('room-name').value;
+
+                document.getElementById('hp-cur').value = localStorage.getItem('dnd_hp_cur');
+                document.getElementById('hp-max').value = localStorage.getItem('dnd_hp_max');
+                document.getElementById('mp-cur').value = localStorage.getItem('dnd_mp_cur');
+                document.getElementById('mp-max').value = localStorage.getItem('dnd_mp_max');
+                document.getElementById('sp-cur').value = localStorage.getItem('dnd_sp_cur');
+                document.getElementById('sp-max').value = localStorage.getItem('dnd_sp_max');
+                document.getElementById('gold-count').value = localStorage.getItem('dnd_gold') || '0';
+                
+                document.getElementById('st-str').value = localStorage.getItem('dnd_str') || '10';
+                document.getElementById('st-dex').value = localStorage.getItem('dnd_dex') || '10';
+                document.getElementById('st-int').value = localStorage.getItem('dnd_int') || '10';
+                document.getElementById('st-cha').value = localStorage.getItem('dnd_cha') || '10';
+                document.getElementById('st-will').value = localStorage.getItem('dnd_will') || '10';
+
+                document.getElementById('player-effects').value = localStorage.getItem('dnd_effects') || '';
+
+                const savedSkills = localStorage.getItem('dnd_skills');
+                if(savedSkills) playerSkills = JSON.parse(savedSkills);
+
+                const savedInv = localStorage.getItem('dnd_inventory_v3');
+                if (savedInv) temporaryInventoryCache = JSON.parse(savedInv);
+            }
+            
+            renderInventory();
+            renderSkills();
+
+            const savedRole = localStorage.getItem('dnd_role') || 'player';
+            currentRole = savedRole;
+            if (savedRole === 'dm') {
+                document.getElementById('role-dm').checked = true;
+                switchRole('dm');
+            } else {
+                document.getElementById('role-player').checked = true;
+                switchRole('player');
+            }
+        }
+
+        function fileToDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function uploadSceneFiles() {
+            const mapFileInput = document.getElementById('dm-file-map');
+            const audioFileInput = document.getElementById('dm-file-audio');
+            let mapBase64 = null;
+            let audioBase64 = null;
+
+            if (mapFileInput.files[0]) mapBase64 = await fileToDataURL(mapFileInput.files[0]);
+            if (audioFileInput.files[0]) audioBase64 = await fileToDataURL(audioFileInput.files[0]);
+
+            if (mapBase64 || audioBase64) {
+                socket.emit('change_scene', { image: mapBase64, audio: audioBase64 });
+            }
+        }
+
+        async function giveItemToPlayer() {
+            const targetId = document.getElementById('dm-target-player').value;
+            const slot = parseInt(document.getElementById('dm-item-slot').value) || 1;
+            const fileInput = document.getElementById('dm-item-file');
+            const desc = document.getElementById('dm-item-desc').value.trim();
+
+            if (!targetId) { alert('Выберите игрока в Кузнице Предметов!'); return; }
+
+            let url = '';
+            if (fileInput.files[0]) {
+                url = await fileToDataURL(fileInput.files[0]);
+            }
+
+            socket.emit('dm_give_item', {
+                targetId: targetId,
+                item: { slot, url, desc }
+            });
+
+            fileInput.value = '';
+            document.getElementById('dm-item-desc').value = '';
+            alert('Команда на обновление предмета отправлена игроку!');
+        }
+
+        function loadTargetDataToDM() {
+            const targetId = document.getElementById('dm-edit-target').value;
+            const container = document.getElementById('dm-editor-fields');
+            
+            if(targetId && cachedPlayersData[targetId]) {
+                const p = cachedPlayersData[targetId];
+                container.style.display = 'flex';
+                
+                const hpParts = p.hp ? p.hp.split('/') : ['20','20'];
+                const mpParts = p.mp ? p.mp.split('/') : ['10','10'];
+                const spParts = p.sp ? p.sp.split('/') : ['0','10'];
+                
+                document.getElementById('dm-hp-cur').value = hpParts[0] || '20';
+                document.getElementById('dm-hp-max').value = hpParts[1] || '20';
+                document.getElementById('dm-mp-cur').value = mpParts[0] || '10';
+                document.getElementById('dm-mp-max').value = mpParts[1] || '10';
+                document.getElementById('dm-sp-cur').value = spParts[0] || '0';
+                document.getElementById('dm-sp-max').value = spParts[1] || '10';
+                
+                document.getElementById('dm-gold').value = p.gold || '0';
+                document.getElementById('dm-str').value = p.str || '10';
+                document.getElementById('dm-dex').value = p.dex || '10';
+                document.getElementById('dm-int').value = p.int || '10';
+                document.getElementById('dm-cha').value = p.cha || '10';
+                document.getElementById('dm-will').value = p.will || '10';
+                document.getElementById('dm-effects-input').value = p.effects || '';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function applyStatsFromDM() {
+            const targetId = document.getElementById('dm-edit-target').value;
+            if(!targetId) { alert('Сначала выберите игрока!'); return; }
+            
+            const payload = {
+                hpCur: document.getElementById('dm-hp-cur').value,
+                hpMax: document.getElementById('dm-hp-max').value,
+                mpCur: document.getElementById('dm-mp-cur').value,
+                mpMax: document.getElementById('dm-mp-max').value,
+                spCur: document.getElementById('dm-sp-cur').value,
+                spMax: document.getElementById('dm-sp-max').value,
+                gold: document.getElementById('dm-gold').value,
+                str: document.getElementById('dm-str').value,
+                dex: document.getElementById('dm-dex').value,
+                int: document.getElementById('dm-int').value,
+                cha: document.getElementById('dm-cha').value,
+                will: document.getElementById('dm-will').value,
+                effects: document.getElementById('dm-effects-input').value.trim()
+            };
+
+            socket.emit('dm_give_item', {
+                targetId: targetId,
+                statsUpdate: payload
+            });
+            alert('Характеристики успешно отправлены персонажу!');
+        }
+
+        // ДОБАВЛЕНО: Функция ручной регулировки громкости игроком
+        function changeVolume(val) {
+            const audioPlayer = document.getElementById('bg-music');
+            audioPlayer.volume = val;
+            document.getElementById('volume-value').innerText = Math.round(val * 100) + '%';
+        }
+
+        // ДОБАВЛЕНО: Функция Мастера для отправки запроса на стоп трека
+        function stopAudioFromDM() {
+            socket.emit('dm_stop_audio');
+        }
+
+        socket.on('receive_item', (data) => {
+            if (data.statsUpdate !== undefined) {
+                const s = data.statsUpdate;
+                document.getElementById('hp-cur').value = s.hpCur;
+                document.getElementById('hp-max').value = s.hpMax;
+                document.getElementById('mp-cur').value = s.mpCur;
+                document.getElementById('mp-max').value = s.mpMax;
+                document.getElementById('sp-cur').value = s.spCur;
+                document.getElementById('sp-max').value = s.spMax;
+                document.getElementById('gold-count').value = s.gold;
+                document.getElementById('st-str').value = s.str;
+                document.getElementById('st-dex').value = s.dex;
+                document.getElementById('st-int').value = s.int;
+                document.getElementById('st-cha').value = s.cha;
+                document.getElementById('st-will').value = s.will;
+                document.getElementById('player-effects').value = s.effects;
+                
+                renderInventory(); 
+                saveAndSend();
+                return;
+            }
+
+            if (data.item !== undefined) {
+                const slotId = parseInt(data.item.slot) || 1;
+                
+                temporaryInventoryCache[slotId] = {
+                    url: data.item.url || '',
+                    desc: data.item.desc || ''
+                };
+
+                renderInventory();
+
+                const descInput = document.getElementById(`cell-desc-${slotId}`);
+                if (descInput) descInput.value = data.item.desc || '';
+                
+                const imgEl = document.getElementById(`cell-img-${slotId}`);
+                if (imgEl) {
+                    if (data.item.url) {
+                        imgEl.src = data.item.url;
+                        imgEl.style.display = 'block';
+                    } else {
+                        imgEl.src = '';
+                        imgEl.style.display = 'none';
+                    }
+                }
+
+                saveToLocalStorage();
+                if (currentRole !== 'dm') {
+                    const items = getInventoryItems();
+                    socket.emit('player_update', {
+                        id: myUserId,
+                        userId: myUserId,
+                        name: document.getElementById('player-name').value.trim(),
+                        role: currentRole,
+                        hp: document.getElementById('hp-cur').value + '/' + document.getElementById('hp-max').value,
+                        mp: document.getElementById('mp-cur').value + '/' + document.getElementById('mp-max').value,
+                        sp: document.getElementById('sp-cur').value + '/' + document.getElementById('sp-max').value,
+                        gold: document.getElementById('gold-count').value || '0',
+                        str: document.getElementById('st-str').value,
+                        dex: document.getElementById('st-dex').value,
+                        int: document.getElementById('st-int').value,
+                        cha: document.getElementById('st-cha').value,
+                        will: document.getElementById('st-will').value,
+                        effects: document.getElementById('player-effects').value.trim(),
+                        skills: playerSkills,
+                        inventory: items
+                    });
+                }
+                return;
+            }
+        });
+
+        socket.on('players_visible', (players) => {
+            cachedPlayersData = players; 
+            const monitor = document.getElementById('dm-players-monitor');
+            const itemSelector = document.getElementById('dm-target-player');
+            const editSelector = document.getElementById('dm-edit-target');
+            
+            const currentItemSel = itemSelector.value;
+            const currentEditSel = editSelector.value;
+            
+            itemSelector.innerHTML = '<option value="">-- Выберите игрока --</option>';
+            editSelector.innerHTML = '<option value="">-- Выберите игрока --</option>';
+            monitor.innerHTML = '';
+            let hasPlayers = false;
+            
+            for (let id in players) {
+                const p = players[id];
+                if (p.role === 'dm' || p.name === 'Мастер') continue;
+                hasPlayers = true;
+
+                const targetKey = p.id || id;
+
+                [itemSelector, editSelector].forEach(sel => {
+                    const opt = document.createElement('option');
+                    opt.value = targetKey; 
+                    opt.innerText = p.name;
+                    sel.appendChild(opt);
+                });
+                
+                let itemsHTML = '';
+                if (p.inventory && p.inventory.length > 0) {
+                    itemsHTML = p.inventory.map((item) => {
+                        if (!item.url && !item.desc) return '';
+                        const imgSrc = item.url || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50"><rect width="50" height="50" fill="%23111"/></svg>';
+                        return `
+                            <div style="background: #111; border: 1px solid #f0a500; padding: 3px; border-radius: 4px; text-align: center; min-height: 60px;" title="Слот ${item.slot}: ${item.desc}">
+                                <img src="${imgSrc}" style="width: 100%; height: 35px; object-fit: contain; background: #000; border-radius: 2px;">
+                                <div style="font-size: 9px; color: #ffbe33; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">[${item.slot}] ${item.desc || '---'}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                if (!itemsHTML) itemsHTML = '<div style="color:#aaa; grid-column: span 3; text-align: center;">Рюкзак пуст</div>';
+
+                let skillsHTML = '';
+                if(p.skills && p.skills.length > 0) {
+                    skillsHTML = p.skills.map(s => `
+                        <details style="background:#111; padding:4px; margin-top:3px; border-radius:4px; border-left:2px solid #ffbe33;">
+                            <summary style="cursor:pointer; font-size:12px; color:#ffbe33; outline:none;">👁️ ${s.name}</summary>
+                            <p style="margin:4px 0 0 0; font-size:11px; color:#ccc; white-space:pre-wrap;">${s.desc || 'Нет описания.'}</p>
+                        </details>
+                    `).join('');
+                } else {
+                    skillsHTML = '<span style="color:#888; font-size:12px;">Нет изученных умений</span>';
+                }
+
+                const card = document.createElement('div');
+                card.className = 'player-card';
+                card.innerHTML = `
+                    <strong>🧙‍♂️ ${p.name || 'Без имени'}</strong>
+                    <p style="color: #ffbe33; font-size:13px; background:#111; padding:4px; border-radius:4px;"><b>✨ Эффекты:</b> ${p.effects || '—'}</p>
+                    <p>❤️ ХП: ${p.hp} | 🔮 МП: ${p.mp} | ⚡ Уст: ${p.sp}</p>
+                    <p>Золото: <span style="display:flex; align-items:center; gap:4px; color:#ffd700; font-weight:bold;"><span class="gold-icon"></span> ${p.gold || 0}</span></p>
+                    <p style="font-size: 12px; color: #aaa; background: #1a1a1a; padding: 4px; border-radius: 4px;">
+                        💪 СИЛ: ${p.str} | 🏃 ЛОВ: ${p.dex} | 🧠 ИНТ: ${p.int} | 🗣️ ХАР: ${p.cha} | 🛡️ ВОЛ: ${p.will}
+                    </p>
+                    <div style="margin-top:8px;"><b>✨ Книга умений игрока:</b></div>
+                    <div style="background:#1a1a1a; padding:6px; border-radius:4px; max-height:120px; overflow-y:auto; margin-bottom:8px;">${skillsHTML}</div>
+                    <p>🎒 <b>Инвентарь:</b></p>
+                    <div class="mini-grid">${itemsHTML}</div>
+                `;
+                monitor.appendChild(card);
+            }
+            
+            itemSelector.value = currentItemSel;
+            editSelector.value = currentEditSel;
+            if(!hasPlayers) monitor.innerHTML = 'В этой комнате пока нет активных игроков...';
+        });
+
+        socket.on('init', (state) => {
+            if (state.currentImage) document.getElementById('map-image').src = state.currentImage;
+            if (state.currentAudio) {
+                playMusic(state.currentAudio);
+            } else {
+                stopMusicLocally();
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromLocalStorage();
+            connectToRoom();
+        });
+
+        function roll(diceType) {
+            const nickname = document.getElementById('player-name').value;
+            const count = parseInt(document.getElementById('dice-count').value) || 1;
+            socket.emit('roll_dice', { nickname, diceType, count });
+        }
+
+        socket.on('dice_result', (data) => {
+            const overlay = document.getElementById('dice-overlay-container');
+            overlay.innerHTML = ''; 
+
+            data.rolls.forEach((finalValue) => {
+                const die = document.createElement('div');
+                die.className = `screen-dice d${data.diceType}`;
+                die.innerText = '?';
+                overlay.appendChild(die);
+
+                let counter = 0;
+                const interval = setInterval(() => {
+                    die.innerText = Math.floor(Math.random() * data.diceType) + 1;
+                    counter++;
+                    if (counter > 20) {
+                        clearInterval(interval);
+                        die.innerText = finalValue; 
+                    }
+                }, 50);
+            });
+
+            const log = document.getElementById('dice-log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `🎲 <b>${data.nickname}</b> кинул <b>${data.count}d${data.diceType}</b>: [${data.rolls.join(', ')}] Итог: <strong>${data.total}</strong>`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+
+            setTimeout(() => { overlay.innerHTML = ''; }, 1800);
+        });
+
+        socket.on('scene_changed', (state) => {
+            if (state.currentImage) document.getElementById('map-image').src = state.currentImage;
+            if (state.currentAudio) {
+                playMusic(state.currentAudio);
+            } else {
+                stopMusicLocally();
+            }
+        });
+
+        // ДОБАВЛЕНО: Слушатель события полной остановки музыки от бэкенда
+        socket.on('stop_audio', () => {
+            stopMusicLocally();
+        });
+
+        function playMusic(url) {
+            const audioPlayer = document.getElementById('bg-music');
+            if (audioPlayer.src !== url) {
+                audioPlayer.src = url;
+                // Применяем текущую громкость ползунка при старте нового трека
+                audioPlayer.volume = document.getElementById('volume-control').value;
+                audioPlayer.play().catch(e => console.log("Музыка ждет взаимодействия пользователя с сайтом"));
+            }
+        }
+
+        // ДОБАВЛЕНО: Локальное выключение плеера
+        function stopMusicLocally() {
+            const audioPlayer = document.getElementById('bg-music');
+            audioPlayer.pause();
+            audioPlayer.src = "";
+        }
+    </script>
+</body>
+</html>
